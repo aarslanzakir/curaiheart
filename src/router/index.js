@@ -31,6 +31,12 @@ const routes = [
     name: 'VideoDisplay',
     component: () => import('../views/VideoDisplay.vue'),
     meta: { requiresAuth: true }
+  },
+  {
+    path: '/patient/:id/edit',
+    name: 'EditPatient',
+    component: () => import('../views/EditPatient.vue'),
+    meta: { requiresAuth: true }
   }
 ]
 
