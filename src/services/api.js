@@ -213,12 +213,12 @@ export const apiService = {
   /**
    * Get video stream URL
    * @param {string} videoId - Video ID
-   * @returns {string} Video stream URL
+   * @returns {string} Video stream URL with auth token
    */
   getVideoStreamUrl: (videoId) => {
-    // Note: For authenticated video streaming, you might need to handle token differently
-    // This returns the URL - the video player will need to handle authentication
-    return `${API_URL}/videos/${videoId}/stream`
+    const token = localStorage.getItem('authToken')
+    const baseUrl = `${API_URL}/videos/${videoId}/stream`
+    return token ? `${baseUrl}?token=${token}` : baseUrl
   },
 
   /**
@@ -229,6 +229,51 @@ export const apiService = {
   deleteVideo: async (videoId) => {
     const response = await api.delete(`/videos/${videoId}`)
     return response.data
+  },
+
+  // ==================== Video Processing/Classification APIs ====================
+
+  /**
+   * Trigger ML video analysis to classify echo views
+   * @param {string} videoId - Video ID to analyze
+   * @param {boolean} mock - Use mock data for testing (default: false)
+   * @returns {Promise<Object>} Processing job info
+   */
+  analyzeVideo: async (videoId, mock = false) => {
+    const url = mock ? `/processing/${videoId}/analyze?mock=true` : `/processing/${videoId}/analyze`
+    const response = await api.post(url)
+    return response.data.data
+  },
+
+  /**
+   * Get processing status for a video
+   * @param {string} videoId - Video ID
+   * @returns {Promise<Object>} Processing status and results
+   */
+  getProcessingStatus: async (videoId) => {
+    const response = await api.get(`/processing/${videoId}/status`)
+    return response.data.data
+  },
+
+  /**
+   * Get all segments for a video
+   * @param {string} videoId - Video ID
+   * @returns {Promise<Array>} Array of segment objects
+   */
+  getVideoSegments: async (videoId) => {
+    const response = await api.get(`/videos/${videoId}/segments`)
+    return response.data.data
+  },
+
+  /**
+   * Get specific view segment info
+   * @param {string} videoId - Video ID
+   * @param {string} view - View type (A4C, A2C, PLAX, PSAX)
+   * @returns {Promise<Object>} Segment info with streamUrl, startTime, endTime
+   */
+  getViewSegment: async (videoId, view) => {
+    const response = await api.get(`/videos/${videoId}/segment/${view}`)
+    return response.data.data
   },
 
   // ==================== Health Check ====================

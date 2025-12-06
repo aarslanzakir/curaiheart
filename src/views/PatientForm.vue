@@ -91,13 +91,13 @@
           <h2>Video Upload</h2>
 
           <div class="form-group">
-            <label for="video">Video File (.mp4) *</label>
+            <label for="video">Video File (.mp4, .avi) *</label>
             <div class="file-upload-area">
               <input
                 id="video"
                 ref="fileInput"
                 type="file"
-                accept=".mp4,video/mp4"
+                accept=".mp4,.avi,video/mp4,video/x-msvideo"
                 required
                 @change="handleFileChange"
                 :disabled="submitting"
@@ -111,7 +111,7 @@
                     <line x1="12" y1="3" x2="12" y2="15"></line>
                   </svg>
                   <p>Click to upload or drag and drop</p>
-                  <span>.mp4 files only</span>
+                  <span>.mp4 or .avi files</span>
                 </div>
                 <div v-else class="file-selected">
                   <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -133,6 +133,23 @@
               <div class="progress-fill" :style="{ width: uploadProgress + '%' }"></div>
             </div>
             <span class="progress-text">{{ uploadProgress }}% uploaded</span>
+          </div>
+
+          <div v-if="classificationStatus" class="classification-progress">
+            <div class="classification-header">
+              <svg v-if="classificationStatus === 'processing'" class="spinner" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10" opacity="0.25"></circle>
+                <path d="M12 2a10 10 0 0 1 10 10"></path>
+              </svg>
+              <svg v-else-if="classificationStatus === 'completed'" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4caf50" stroke-width="2">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+              </svg>
+              <span>{{ classificationMessage }}</span>
+            </div>
+            <div v-if="classifiedViews.length > 0" class="classified-views">
+              <span class="view-tag" v-for="view in classifiedViews" :key="view">{{ view.toUpperCase() }}</span>
+            </div>
           </div>
         </div>
 
@@ -183,6 +200,9 @@ const fileInput = ref(null)
 const submitting = ref(false)
 const errorMessage = ref('')
 const uploadProgress = ref(0)
+const classificationStatus = ref(null) // null, 'processing', 'completed', 'failed'
+const classificationMessage = ref('')
+const classifiedViews = ref([])
 
 const isFormValid = computed(() => {
   return (
@@ -206,8 +226,8 @@ const handleFileChange = (event) => {
 
   // Validate file extension
   const fileName = file.name.toLowerCase()
-  if (!fileName.endsWith('.mp4')) {
-    fileError.value = 'Only .mp4 files are allowed'
+  if (!fileName.endsWith('.mp4') && !fileName.endsWith('.avi')) {
+    fileError.value = 'Only .mp4 and .avi files are allowed'
     selectedFile.value = null
     fileInput.value.value = ''
     return
@@ -239,6 +259,9 @@ const handleSubmit = async () => {
   submitting.value = true
   errorMessage.value = ''
   uploadProgress.value = 0
+  classificationStatus.value = null
+  classificationMessage.value = ''
+  classifiedViews.value = []
 
   try {
     // Step 1: Create patient record
@@ -246,7 +269,7 @@ const handleSubmit = async () => {
     const patientId = patientResponse._id || patientResponse.id
 
     // Step 2: Upload video file
-    await apiService.uploadVideo(
+    const uploadedVideo = await apiService.uploadVideo(
       patientId,
       selectedFile.value,
       (progressEvent) => {
@@ -256,16 +279,69 @@ const handleSubmit = async () => {
       }
     )
 
-    // Success - redirect to video display page
-    router.push(`/patient/${patientId}/video`)
+    // Step 3: Trigger ML analysis
+    uploadProgress.value = 100
+    classificationStatus.value = 'processing'
+    classificationMessage.value = 'Analyzing video and classifying echo views...'
+
+    const videoId = uploadedVideo._id || uploadedVideo.id
+    await apiService.analyzeVideo(videoId)
+
+    // Step 4: Poll for processing results
+    await pollProcessingStatus(videoId, patientId)
   } catch (error) {
     console.error('Error saving patient:', error)
     errorMessage.value =
       error.message ||
       'Failed to save patient. Please try again.'
+    classificationStatus.value = null
   } finally {
     submitting.value = false
   }
+}
+
+const pollProcessingStatus = async (videoId, patientId) => {
+  const maxAttempts = 5 // Poll for up to 15 seconds (5 * 3 seconds)
+  let attempts = 0
+
+  while (attempts < maxAttempts) {
+    try {
+      const status = await apiService.getProcessingStatus(videoId)
+
+      if (status.status === 'completed') {
+        classificationStatus.value = 'completed'
+        classificationMessage.value = 'Classification complete! Views detected:'
+        // Extract view names from segments array
+        classifiedViews.value = (status.segments || []).map(s => s.view)
+
+        // Wait a moment to show success, then redirect
+        setTimeout(() => {
+          router.push(`/patient/${patientId}/video`)
+        }, 1500)
+        return
+      } else if (status.status === 'failed') {
+        throw new Error(status.error || 'Classification failed')
+      }
+
+      // Update progress message
+      classificationMessage.value = `Analyzing video... (attempt ${attempts + 1}/${maxAttempts})`
+
+      // Wait 3 seconds before next poll
+      await new Promise(resolve => setTimeout(resolve, 3000))
+      attempts++
+    } catch (error) {
+      // If polling fails, still redirect to video page (processing may complete in background)
+      console.warn('Processing polling error:', error)
+      break
+    }
+  }
+
+  // Timeout or error - redirect anyway (ML processing continues in background)
+  classificationStatus.value = 'completed'
+  classificationMessage.value = 'Video uploaded! ML processing continues in background...'
+  setTimeout(() => {
+    router.push(`/patient/${patientId}/video`)
+  }, 1500)
 }
 
 const goBack = () => {
@@ -513,5 +589,48 @@ const goBack = () => {
   opacity: 0.6;
   cursor: not-allowed;
   transform: none;
+}
+
+.classification-progress {
+  background: linear-gradient(135deg, #f0f4ff 0%, #e8f5e9 100%);
+  border: 1px solid #c8e6c9;
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 16px;
+}
+
+.classification-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+  color: #333;
+  font-weight: 500;
+}
+
+.classification-header .spinner {
+  animation: spin 1s linear infinite;
+  color: #667eea;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.classified-views {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.view-tag {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 600;
 }
 </style>

@@ -1,136 +1,54 @@
 <template>
   <div class="reference-values">
     <div class="reference-header">
-      <h2>Reference Values</h2>
-      <div class="sex-indicator" :class="sex">
-        {{ sex === 'male' ? 'Male' : 'Female' }}
-      </div>
-    </div>
-
-    <div class="values-section">
-      <h3>Left Ventricular Dimensions</h3>
-      <div class="value-row">
-        <div class="value-label">LV End-Diastolic Diameter (LVEDD)</div>
-        <div class="value-data">
-          <span class="reference-range">{{ referenceRanges.lvedd[sex] }}</span>
-          <span v-if="predictedValues.lvedd" class="predicted">
-            Predicted: {{ predictedValues.lvedd }}
-          </span>
-        </div>
-      </div>
-
-      <div class="value-row">
-        <div class="value-label">LV End-Systolic Diameter (LVESD)</div>
-        <div class="value-data">
-          <span class="reference-range">{{ referenceRanges.lvesd[sex] }}</span>
-          <span v-if="predictedValues.lvesd" class="predicted">
-            Predicted: {{ predictedValues.lvesd }}
-          </span>
-        </div>
-      </div>
-
-      <div class="value-row">
-        <div class="value-label">Interventricular Septum (IVS)</div>
-        <div class="value-data">
-          <span class="reference-range">{{ referenceRanges.ivs[sex] }}</span>
-          <span v-if="predictedValues.ivs" class="predicted">
-            Predicted: {{ predictedValues.ivs }}
-          </span>
-        </div>
-      </div>
-
-      <div class="value-row">
-        <div class="value-label">Posterior Wall Thickness (PWT)</div>
-        <div class="value-data">
-          <span class="reference-range">{{ referenceRanges.pwt[sex] }}</span>
-          <span v-if="predictedValues.pwt" class="predicted">
-            Predicted: {{ predictedValues.pwt }}
-          </span>
+      <h2>ML Predictions</h2>
+      <div class="header-badges">
+        <div class="view-badge">{{ viewLabels[selectedView] || selectedView }}</div>
+        <div class="sex-indicator" :class="sex">
+          {{ sex === 'male' ? 'MALE' : 'FEMALE' }}
         </div>
       </div>
     </div>
 
-    <div class="values-section">
-      <h3>Left Ventricular Volume</h3>
-      <div class="value-row">
-        <div class="value-label">LV End-Diastolic Volume (LVEDV)</div>
-        <div class="value-data">
-          <span class="reference-range">{{ referenceRanges.lvedv[sex] }}</span>
-          <span v-if="predictedValues.lvedv" class="predicted">
-            Predicted: {{ predictedValues.lvedv }}
-          </span>
-        </div>
-      </div>
-
-      <div class="value-row">
-        <div class="value-label">LV End-Systolic Volume (LVESV)</div>
-        <div class="value-data">
-          <span class="reference-range">{{ referenceRanges.lvesv[sex] }}</span>
-          <span v-if="predictedValues.lvesv" class="predicted">
-            Predicted: {{ predictedValues.lvesv }}
-          </span>
-        </div>
-      </div>
+    <!-- ML Processing Status -->
+    <div v-if="processingStatus === 'processing'" class="ml-processing">
+      <div class="processing-spinner"></div>
+      <p><strong>ML Analysis in Progress</strong></p>
+      <p>Analyzing {{ viewLabels[selectedView] || 'view' }} to extract measurements...</p>
     </div>
 
-    <div class="values-section">
-      <h3>Left Ventricular Function</h3>
-      <div class="value-row">
-        <div class="value-label">Ejection Fraction (EF)</div>
-        <div class="value-data">
-          <span class="reference-range">{{ referenceRanges.ef[sex] }}</span>
-          <span v-if="predictedValues.ef" class="predicted">
-            Predicted: {{ predictedValues.ef }}
-          </span>
+    <!-- Show predictions when available -->
+    <template v-else-if="hasPredictedValues">
+      <div v-for="section in currentViewMeasurements" :key="section.title" class="values-section">
+        <h3>{{ section.title }}</h3>
+        <div v-for="measure in section.measurements" :key="measure.key" class="value-row">
+          <div class="value-label">{{ measure.label }}</div>
+          <div class="value-data">
+            <span v-if="predictedValues[measure.key]" class="predicted-value">
+              {{ predictedValues[measure.key] }}
+            </span>
+            <span v-else class="no-data">--</span>
+            <span class="normal-range">(Normal: {{ referenceRanges[measure.key]?.[sex] || 'N/A' }})</span>
+          </div>
         </div>
       </div>
+    </template>
 
-      <div class="value-row">
-        <div class="value-label">Fractional Shortening (FS)</div>
-        <div class="value-data">
-          <span class="reference-range">{{ referenceRanges.fs[sex] }}</span>
-          <span v-if="predictedValues.fs" class="predicted">
-            Predicted: {{ predictedValues.fs }}
-          </span>
-        </div>
-      </div>
-    </div>
-
-    <div class="values-section">
-      <h3>Left Atrial Dimensions</h3>
-      <div class="value-row">
-        <div class="value-label">Left Atrial Diameter (LAD)</div>
-        <div class="value-data">
-          <span class="reference-range">{{ referenceRanges.lad[sex] }}</span>
-          <span v-if="predictedValues.lad" class="predicted">
-            Predicted: {{ predictedValues.lad }}
-          </span>
-        </div>
-      </div>
-
-      <div class="value-row">
-        <div class="value-label">Left Atrial Volume (LAV)</div>
-        <div class="value-data">
-          <span class="reference-range">{{ referenceRanges.lav[sex] }}</span>
-          <span v-if="predictedValues.lav" class="predicted">
-            Predicted: {{ predictedValues.lav }}
-          </span>
-        </div>
-      </div>
-    </div>
-
-    <div v-if="!hasPredictedValues" class="ml-placeholder">
-      <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10"></circle>
-        <line x1="12" y1="8" x2="12" y2="12"></line>
-        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+    <!-- No predictions yet -->
+    <div v-else class="ml-placeholder">
+      <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+        <line x1="3" y1="9" x2="21" y2="9"></line>
+        <line x1="9" y1="21" x2="9" y2="9"></line>
       </svg>
-      <p>Predicted values will be displayed here once ML model analysis is integrated.</p>
+      <h3>No ML Predictions Available</h3>
+      <p>ML analysis has not been completed for this video.</p>
+      <p class="hint">Predictions will appear here once the model processes the {{ viewLabels[selectedView] || 'selected' }} view.</p>
     </div>
 
-    <div class="reference-footer">
+    <div v-if="hasPredictedValues" class="reference-footer">
       <p class="reference-note">
-        <strong>Note:</strong> Reference ranges are based on American Society of Echocardiography (ASE) guidelines and may vary based on individual patient characteristics.
+        <strong>Note:</strong> Values shown are ML-predicted measurements for {{ viewLabels[selectedView] || 'selected' }} view. Normal ranges based on ASE guidelines.
       </p>
     </div>
   </div>
@@ -148,52 +66,159 @@ const props = defineProps({
   predictedValues: {
     type: Object,
     default: () => ({})
+  },
+  processingStatus: {
+    type: String,
+    default: ''
+  },
+  selectedView: {
+    type: String,
+    default: 'A4C'
   }
 })
 
+// View labels
+const viewLabels = {
+  A4C: 'Apical 4-Chamber',
+  A2C: 'Apical 2-Chamber',
+  PLAX: 'Parasternal Long Axis',
+  PSAX: 'Parasternal Short Axis'
+}
+
+// Measurements specific to each view
+const viewMeasurements = {
+  A4C: [
+    {
+      title: 'LV Volumes & Function',
+      measurements: [
+        { key: 'lvedv', label: 'LV End-Diastolic Volume (LVEDV)' },
+        { key: 'lvesv', label: 'LV End-Systolic Volume (LVESV)' },
+        { key: 'ef', label: 'Ejection Fraction (EF)' }
+      ]
+    },
+    {
+      title: 'Chamber Dimensions',
+      measurements: [
+        { key: 'lav', label: 'Left Atrial Volume (LAV)' },
+        { key: 'rav', label: 'Right Atrial Area (RAA)' }
+      ]
+    },
+    {
+      title: 'Valve Assessment',
+      measurements: [
+        { key: 'mvE', label: 'Mitral Valve E Wave' },
+        { key: 'mvA', label: 'Mitral Valve A Wave' },
+        { key: 'tvRegurg', label: 'Tricuspid Regurgitation Velocity' }
+      ]
+    }
+  ],
+  A2C: [
+    {
+      title: 'LV Volumes (Biplane)',
+      measurements: [
+        { key: 'lvedv_a2c', label: 'LV End-Diastolic Volume (A2C)' },
+        { key: 'lvesv_a2c', label: 'LV End-Systolic Volume (A2C)' },
+        { key: 'ef_biplane', label: 'Biplane Ejection Fraction' }
+      ]
+    },
+    {
+      title: 'Wall Motion',
+      measurements: [
+        { key: 'inferiorWall', label: 'Inferior Wall Motion' },
+        { key: 'anteriorWall', label: 'Anterior Wall Motion' }
+      ]
+    },
+    {
+      title: 'Left Atrium',
+      measurements: [
+        { key: 'lav_a2c', label: 'LA Volume (A2C View)' }
+      ]
+    }
+  ],
+  PLAX: [
+    {
+      title: 'LV Dimensions',
+      measurements: [
+        { key: 'lvedd', label: 'LV End-Diastolic Diameter (LVEDD)' },
+        { key: 'lvesd', label: 'LV End-Systolic Diameter (LVESD)' },
+        { key: 'fs', label: 'Fractional Shortening (FS)' }
+      ]
+    },
+    {
+      title: 'Wall Thickness',
+      measurements: [
+        { key: 'ivs', label: 'Interventricular Septum (IVS)' },
+        { key: 'pwt', label: 'Posterior Wall Thickness (PWT)' }
+      ]
+    },
+    {
+      title: 'Aortic Root & LA',
+      measurements: [
+        { key: 'aorticRoot', label: 'Aortic Root Diameter' },
+        { key: 'lad', label: 'Left Atrial Diameter (LAD)' }
+      ]
+    }
+  ],
+  PSAX: [
+    {
+      title: 'LV Assessment',
+      measurements: [
+        { key: 'lvArea', label: 'LV Cross-sectional Area' },
+        { key: 'wallMotion', label: 'Regional Wall Motion' }
+      ]
+    },
+    {
+      title: 'RV Assessment',
+      measurements: [
+        { key: 'rvSize', label: 'RV Size' },
+        { key: 'rvFunction', label: 'RV Function' }
+      ]
+    },
+    {
+      title: 'Valve Level',
+      measurements: [
+        { key: 'avArea', label: 'Aortic Valve Area' },
+        { key: 'mvArea', label: 'Mitral Valve Area' }
+      ]
+    }
+  ]
+}
+
 // Reference ranges based on sex (ASE guidelines)
 const referenceRanges = {
-  lvedd: {
-    male: '42-58 mm',
-    female: '38-52 mm'
-  },
-  lvesd: {
-    male: '25-40 mm',
-    female: '22-35 mm'
-  },
-  ivs: {
-    male: '6-10 mm',
-    female: '6-9 mm'
-  },
-  pwt: {
-    male: '6-10 mm',
-    female: '6-9 mm'
-  },
-  lvedv: {
-    male: '67-155 mL',
-    female: '56-104 mL'
-  },
-  lvesv: {
-    male: '22-58 mL',
-    female: '19-49 mL'
-  },
-  ef: {
-    male: '52-72%',
-    female: '54-74%'
-  },
-  fs: {
-    male: '25-45%',
-    female: '27-45%'
-  },
-  lad: {
-    male: '27-38 mm',
-    female: '27-38 mm'
-  },
-  lav: {
-    male: '22-58 mL',
-    female: '22-52 mL'
-  }
+  lvedd: { male: '42-58 mm', female: '38-52 mm' },
+  lvesd: { male: '25-40 mm', female: '22-35 mm' },
+  ivs: { male: '6-10 mm', female: '6-9 mm' },
+  pwt: { male: '6-10 mm', female: '6-9 mm' },
+  lvedv: { male: '67-155 mL', female: '56-104 mL' },
+  lvesv: { male: '22-58 mL', female: '19-49 mL' },
+  lvedv_a2c: { male: '67-155 mL', female: '56-104 mL' },
+  lvesv_a2c: { male: '22-58 mL', female: '19-49 mL' },
+  ef: { male: '52-72%', female: '54-74%' },
+  ef_biplane: { male: '52-72%', female: '54-74%' },
+  fs: { male: '25-45%', female: '27-45%' },
+  lad: { male: '27-38 mm', female: '27-38 mm' },
+  lav: { male: '22-58 mL', female: '22-52 mL' },
+  lav_a2c: { male: '22-58 mL', female: '22-52 mL' },
+  rav: { male: '< 18 cm²', female: '< 18 cm²' },
+  aorticRoot: { male: '20-37 mm', female: '20-35 mm' },
+  mvE: { male: '0.6-1.3 m/s', female: '0.6-1.3 m/s' },
+  mvA: { male: '0.4-0.9 m/s', female: '0.4-0.9 m/s' },
+  tvRegurg: { male: '< 2.8 m/s', female: '< 2.8 m/s' },
+  inferiorWall: { male: 'Normal', female: 'Normal' },
+  anteriorWall: { male: 'Normal', female: 'Normal' },
+  lvArea: { male: 'Variable', female: 'Variable' },
+  wallMotion: { male: 'Normal', female: 'Normal' },
+  rvSize: { male: '< 42 mm', female: '< 42 mm' },
+  rvFunction: { male: 'Normal', female: 'Normal' },
+  avArea: { male: '3.0-4.0 cm²', female: '3.0-4.0 cm²' },
+  mvArea: { male: '4.0-6.0 cm²', female: '4.0-6.0 cm²' }
 }
+
+// Get measurements for current view
+const currentViewMeasurements = computed(() => {
+  return viewMeasurements[props.selectedView] || viewMeasurements.A4C
+})
 
 const hasPredictedValues = computed(() => {
   return Object.keys(props.predictedValues).length > 0
@@ -213,6 +238,8 @@ const hasPredictedValues = computed(() => {
   align-items: center;
   padding-bottom: 16px;
   border-bottom: 2px solid #667eea;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .reference-header h2 {
@@ -221,10 +248,25 @@ const hasPredictedValues = computed(() => {
   margin: 0;
 }
 
-.sex-indicator {
-  padding: 6px 16px;
+.header-badges {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.view-badge {
+  padding: 6px 12px;
   border-radius: 20px;
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.sex-indicator {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
 }
@@ -332,5 +374,65 @@ const hasPredictedValues = computed(() => {
 
 .reference-note strong {
   color: #333;
+}
+
+.predicted-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #667eea;
+}
+
+.no-data {
+  font-size: 18px;
+  font-weight: 700;
+  color: #999;
+}
+
+.normal-range {
+  font-size: 12px;
+  color: #888;
+  margin-left: 8px;
+}
+
+.ml-placeholder h3 {
+  margin: 0;
+  color: #555;
+  font-size: 16px;
+}
+
+.ml-placeholder .hint {
+  font-size: 12px;
+  color: #999;
+}
+
+.ml-processing {
+  background: linear-gradient(135deg, #e8f5e9 0%, #e3f2fd 100%);
+  border: 1px solid #81c784;
+  border-radius: 8px;
+  padding: 20px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.ml-processing p {
+  margin: 0;
+  color: #2e7d32;
+  font-size: 13px;
+}
+
+.processing-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e0e0e0;
+  border-top-color: #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 </style>
